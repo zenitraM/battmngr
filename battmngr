@@ -173,15 +173,15 @@ function setup(){
 # Globals:
 #   None
 # Arguments:
-#   Expected mode code
+#   Expected bit to check (QTMD, STMD) and mode code
 # Outputs:
 #   None
 #######################################
 function check_mode(){
-	echo '\_SB.PCI0.LPC0.EC0.SPMO' > /proc/acpi/call
+	echo "\_SB.PCI0.LPC0.EC0.$1" > /proc/acpi/call
 	check=$(cat /proc/acpi/call | cut -d '' -f1)
 
-	if ! (( $check == $1 )); then
+	if ! (( $check == $2 )); then
 		error 2
 	fi
 }
@@ -200,12 +200,12 @@ function check_mode(){
 function check_charge_mode(){
 	# if we are checking rapid charge mode
 	if (( $1 == 0 )); then
-		echo '\_SB.PCI0.LPC0.EC0.QCHO' > /proc/acpi/call
+		echo '\_SB.PCI0.LPC0.EC0.FCGM' > /proc/acpi/call
 		check=$(cat /proc/acpi/call | cut -d '' -f1)
 		
 	# if we are checking battery conservation mode
 	elif (( $1 == 1 )); then
-		echo '\_SB.PCI0.LPC0.EC0.BTSM' > /proc/acpi/call
+		echo '\_SB.PCI0.LPC0.EC0.BTSG' > /proc/acpi/call
 		check=$(cat /proc/acpi/call | cut -d '' -f1)
 	else
 		# unexpected error!
@@ -232,19 +232,22 @@ function set_operation(){
 		1)
 			# Intelligent Cooling 
 			echo '\_SB.PCI0.LPC0.EC0.VPC0.DYTC 0x000FB001' > /proc/acpi/call
-			check_mode "0x0"
+			check_mode "STMD" "0x1"
+			check_mode "QTMD" "0x0"
 		;;
 
 		2)
 			# Extreme Performance 
  			echo '\_SB.PCI0.LPC0.EC0.VPC0.DYTC 0x0012B001' > /proc/acpi/call
- 			check_mode "0x1"
+			check_mode "STMD" "0x0"
+			check_mode "QTMD" "0x0"
 		;;
 
 		3)
 			# Battery Saving
 			echo '\_SB.PCI0.LPC0.EC0.VPC0.DYTC 0x0013B001' > /proc/acpi/call
-			check_mode "0x2"
+			check_mode "STMD" "0x0"
+			check_mode "QTMD" "0x1"
 		;;
 
 		*)
@@ -306,21 +309,33 @@ function set_charge_operation(){
 #   Print battery mode name on STDOUT
 #######################################
 function read_operation(){
-	echo '\_SB.PCI0.LPC0.EC0.SPMO' > /proc/acpi/call
-	check=$(cat /proc/acpi/call | cut -d '' -f1)
+	echo '\_SB.PCI0.LPC0.EC0.STMD' > /proc/acpi/call
+	stmd=$(cat /proc/acpi/call | cut -d '' -f1)
+	echo '\_SB.PCI0.LPC0.EC0.QTMD' > /proc/acpi/call
+	qtmd=$(cat /proc/acpi/call | cut -d '' -f1)
 
-	case $check in
+	case $stmd in
 
 		"0x0")
-			echo "Intelligent Cooling"
+			case $qtmd in
+				"0x0")
+				echo "Extreme Performance"
+			;;
+				"0x1")
+				echo "Battery Saving"
+			;;
+			esac
 		;;
 
 		"0x1")
-			echo "Extreme Performance"
-		;;
-
-		"0x2")
-			echo "Battery Saving"
+			case $qtmd in
+				"0x0")
+				echo "Intelligent Cooling"
+			;;
+				"0x1")
+				error 4
+			;;
+			esac
 		;;
 
 		*)
@@ -341,7 +356,7 @@ function read_operation(){
 #######################################
 function read_charge_operation(){
 	# rapid charge check
-	echo '\_SB.PCI0.LPC0.EC0.QCHO' > /proc/acpi/call
+	echo '\_SB.PCI0.LPC0.EC0.FCGM' > /proc/acpi/call
 	check=$(cat /proc/acpi/call | cut -d '' -f1)
 
 	case $check in
@@ -360,7 +375,7 @@ function read_charge_operation(){
 	esac
 	
 	# battery conservation check
-	echo '\_SB.PCI0.LPC0.EC0.BTSM' > /proc/acpi/call
+	echo '\_SB.PCI0.LPC0.EC0.BTSG' > /proc/acpi/call
 	check=$(cat /proc/acpi/call | cut -d '' -f1)
 
 	case $check in
